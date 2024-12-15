@@ -1,0 +1,96 @@
+---
+title: "Modèle sans variables avec NA"
+output: html_document
+date: "2024-11-18"
+---
+
+```{r}
+# Charger les bibliothèques nécessaires
+library(dplyr)    # Manipulation des données
+library(caret)    # Séparation des données et entraînement des modèles
+library(pROC)     # Analyse ROC et calcul de l'AUC
+library(ggplot2)  # Visualisation des résultats
+
+# Charger les données
+file_path <- "support2.csv"  # Chemin vers le fichier
+data <- read.csv(file_path, stringsAsFactors = FALSE)
+
+# Étape 1 : Identifier les colonnes sans NA
+complete_vars <- colnames(data)[colSums(is.na(data)) == 0]
+
+# Créer un sous-ensemble de données avec les colonnes sans NA
+clean_data <- data[, complete_vars]
+
+# Vérifier la présence de la variable cible
+if (!"hospdead" %in% colnames(clean_data)) {
+  stop("La variable cible 'hospdead' est absente des colonnes sans NA.")
+}
+
+# Étape 2 : Séparation des données en ensemble d'entraînement et de test
+set.seed(123)  # Pour la reproductibilité
+split <- createDataPartition(clean_data$hospdead, p = 0.7, list = FALSE)
+train_data <- clean_data[split, ]
+test_data <- clean_data[-split, ]
+
+# Étape 3 : Construire un modèle de régression logistique
+model <- glm(hospdead ~ ., data = train_data, family = binomial)
+
+# Résumé du modèle
+summary(model)
+
+# Étape 4 : Prédictions sur l'ensemble de test
+test_data$predicted <- predict(model, newdata = test_data, type = "response")
+
+# Convertir les probabilités en classes (0/1) avec un seuil de 0.5
+test_data$predicted_class <- ifelse(test_data$predicted > 0.5, 1, 0)
+
+# Étape 5 : Évaluer la performance du modèle
+conf_matrix <- table(test_data$hospdead, test_data$predicted_class)
+print("Matrice de confusion :")
+print(conf_matrix)
+
+accuracy <- sum(diag(conf_matrix)) / sum(conf_matrix)
+print(paste("Précision :", round(accuracy, 2)))
+
+
+```
+La courbe ROC montre la performance de votre modèle de classification en termes de compromis entre sensibilité et spécificité. La courbe dépasse la ligne de base aléatoire (rouge pointillée), indiquant une capacité de classification supérieure au hasard. Cependant, sa forme suggère que le modèle est performant dans certains cas, mais qu’il manque de précision pour d'autres. La valeur exacte de l'AUC est nécessaire pour évaluer plus précisément sa qualité, mais des améliorations pourraient être envisagées, comme l'inclusion de variables explicatives supplémentaires ou l'usage de modèles plus sophistiqués. \\
+
+Analyse du modèle de base :
+Résumé des coefficients :
+
+Les coefficients du modèle sont significatifs (valeurs de p < 0.001), ce qui indique que les variables sélectionnées contribuent au modèle.
+Toutefois, des valeurs extrêmes des coefficients (estimations très grandes ou petites) peuvent suggérer des problèmes de colinéarité ou de mauvaise échelle des données.
+Certaines variables (dzclassCancer, dzclassComa, dzclassCOPD/CHF/Cirrhosis) sont définies comme ayant des singularités, ce qui signifie qu'elles sont parfaitement corrélées avec d'autres variables et ont été exclues du modèle.
+Performance globale du modèle :
+
+Précision : 0.89 (89 % des prédictions sont correctes). C'est une performance solide pour un premier modèle de base.
+AUC : 0.83, ce qui montre une bonne capacité de discrimination entre les classes (vivant/mort).
+Matrice de confusion :
+Vrais positifs (511) et faux positifs (89) montrent une bonne prédiction des cas positifs (morts).
+Vrais négatifs (1920) et faux négatifs (211) indiquent que le modèle a encore des difficultés avec certaines prédictions négatives (vivants).
+Comportement de la courbe ROC :
+
+Problèmes potentiels :
+
+La colinéarité entre certaines variables pourrait fausser les estimations des coefficients.
+La grande amplitude des coefficients suggère un problème d'échelle ou de normalisation des variables continues, qui pourrait affecter l'interprétation et la stabilité du modèle.
+Critères de dispersion :
+La déviance résiduelle (45342.9) est élevée comparée à la null deviance (7264.8), ce qui peut suggérer un ajustement sous-optimal.
+L'AIC (45417) est utile pour comparer ce modèle à d'autres plus complexes. \\
+Recommandations pour amélioration :
+Traitement des données :
+
+Normaliser les variables continues pour réduire l'impact des grandes amplitudes.
+Effectuer une analyse de colinéarité pour supprimer ou combiner les variables fortement corrélées.
+Complexité du modèle :
+
+Explorer des modèles non-linéaires ou des algorithmes plus robustes (arbres de décision, forêts aléatoires, gradient boosting).
+Validation :
+
+Effectuer une validation croisée pour évaluer la robustesse du modèle et minimiser le sur-apprentissage.
+Ajout de variables manquantes :
+
+Imputer les valeurs manquantes pour inclure davantage de variables explicatives susceptibles d'améliorer la performance.
+
+
